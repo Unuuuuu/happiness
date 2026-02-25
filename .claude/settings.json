@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/install-superpowers.sh"
+            "command": ".claude/hooks/install-plugins.sh"
           }
         ]
       }
