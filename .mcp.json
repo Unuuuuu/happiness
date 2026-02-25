@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "type": "http",
+      "url": "https://n8n-mcp.unuuuuu.com/mcp",
+      "headers": {
+        "Authorization": "Bearer 4nE4OSUuCowmbajLFfftHYxVKPj4u1VJOdAD1yCeTRU="
+      }
+    }
+  }
+}
