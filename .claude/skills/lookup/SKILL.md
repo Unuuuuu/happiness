@@ -166,7 +166,7 @@ digraph lookup {
 | launchd + 셸 스크립트 | plist 파일 작성법, 스크립트 위치, launchctl 명령어 안내 |
 | Apple Shortcuts | Shortcuts 앱에서 워크플로우 생성 방법 안내 |
 | Raycast 확장 | 기존 확장 검색 또는 새 확장 개발 안내 |
-| n8n 워크플로우 | `n8n-workflow-patterns`, `n8n-node-configuration` 스킬 안내 |
+| n8n 워크플로우 | 워크플로우 패턴 선택(웹훅/스케줄/API/AI 에이전트/DB) → n8n-mcp 도구로 템플릿 검색 → 워크플로우 생성 및 배포 |
 | Claude Code 스킬 | `brainstorming` 스킬 호출 안내 |
 
 ## Red Flags — 이렇게 하면 안 된다

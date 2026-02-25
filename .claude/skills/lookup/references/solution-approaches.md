@@ -102,8 +102,9 @@
 - 초당 220회 실행 가능
 
 ### 다음 단계
-- n8n 관련 스킬 사용: n8n-workflow-patterns, n8n-node-configuration
-- 워크플로우 설계 → 노드 구성 → 테스트 → 배포
+- 워크플로우 패턴 선택: 웹훅 처리 / 스케줄 작업 / HTTP API 연동 / AI 에이전트 / DB 동기화
+- n8n-mcp 도구로 템플릿 검색 (search_templates) → 기존 템플릿 활용 또는 새 워크플로우 설계
+- 워크플로우 생성 (n8n_create_workflow) → 노드 구성 → 검증 (n8n_validate_workflow) → 배포
 
 ---
 
