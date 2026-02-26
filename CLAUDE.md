@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 프로젝트 개요
 
-**gateway**는 삶의 모든 문제를 Claude Code 스킬로 정의하고 해결하는 메타 저장소다. 전통적인 소스 코드가 아닌, **스킬 정의(Markdown + YAML frontmatter)**와 **설계 문서**로 구성된다.
+**happiness**는 삶의 모든 문제를 Claude Code 스킬로 정의하고 해결하는 메타 저장소다. 전통적인 소스 코드가 아닌, **스킬 정의(Markdown + YAML frontmatter)**와 **설계 문서**로 구성된다.
 
 빌드, 린트, 테스트 명령어는 없다. 스킬이 올바르게 동작하는지는 Claude Code 세션에서 직접 호출하여 확인한다.
 
