@@ -184,7 +184,7 @@ AskUserQuestion으로 승인 여부를 확인한다:
 | launchd + 셸 스크립트 | plist 파일 작성법, 스크립트 위치, launchctl 명령어 안내 |
 | Apple Shortcuts | Shortcuts 앱에서 워크플로우 생성 방법 안내 |
 | Raycast 확장 | 기존 확장 검색 또는 새 확장 개발 안내 |
-| n8n 워크플로우 | 워크플로우 패턴 선택(웹훅/스케줄/API/AI 에이전트/DB) → n8n-mcp 도구로 템플릿 검색 → 워크플로우 생성 및 배포 |
+| n8n 워크플로우 | `n8n-workflow-patterns` 스킬로 아키텍처 패턴 선택 → `n8n-mcp-tools-expert` 스킬 참고하여 `search_templates`로 템플릿 검색 → 워크플로우 생성 및 배포 (노드 설정 시 `n8n-node-configuration`, `n8n-gotchas` 스킬 활용) |
 | Claude Code 스킬 | `brainstorming` 스킬 호출 안내 |
 
 ## Red Flags — 이렇게 하면 안 된다
