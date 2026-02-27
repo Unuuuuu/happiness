@@ -1,6 +1,15 @@
 import 'dotenv/config';
 import { Client, GatewayIntentBits } from 'discord.js';
 
+// 환경변수 검증
+const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_ID', 'N8N_WEBHOOK_URL'];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`Missing required environment variable: ${envVar}`);
+    process.exit(1);
+  }
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -43,20 +52,33 @@ client.on('messageCreate', async (message) => {
     return; // 빈 메시지 무시
   }
 
+  let reaction;
   try {
-    await message.react('\u23F3');
+    reaction = await message.react('\u23F3');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
     const res = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      throw new Error(`Webhook responded with status ${res.status}`);
+    }
+
     const result = await res.json();
 
     await message.reply(result.message || '\uCC98\uB9AC \uC644\uB8CC');
-    await message.reactions.cache.get('\u23F3')?.remove();
+    try { await reaction.users.remove(client.user.id); } catch {}
   } catch (err) {
     console.error('Webhook error:', err);
     await message.reply('\u274C \uC608\uC57D \uC2DC\uC2A4\uD15C\uC5D0 \uC5F0\uACB0\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.');
+    try { if (reaction) await reaction.users.remove(client.user.id); } catch {}
   }
 });
 
