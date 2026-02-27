@@ -355,3 +355,15 @@ Community Edition에서는 n8n Variables 기능을 사용할 수 없다. 값을 
 ### 워크플로우 "active"인데 webhook 미등록
 
 컨테이너 재시작 후 워크플로우가 DB에서는 active이지만 **webhook 핸들러가 메모리에 등록되지 않은** 경우가 있다. 로그에서 `Activated workflow "이름"` 메시지 확인. 없으면 UI에서 토글 OFF → ON.
+
+### MCP로 생성한 Webhook 노드에 webhookId가 없으면 404
+
+`n8n_create_workflow`로 워크플로우를 만들 때 Webhook 노드에 `webhookId` 프로퍼티를 명시하지 않으면, 워크플로우를 활성화해도 **webhook이 등록되지 않아 404**가 반환된다. UI에서 만들면 자동 생성되지만 MCP API로는 직접 넣어야 한다.
+
+```javascript
+// ❌ webhookId 없음 → 활성화해도 404
+{ "id": "wh-1", "name": "Webhook", "type": "n8n-nodes-base.webhook", "parameters": { "path": "my-webhook" } }
+
+// ✅ webhookId 명시 → 정상 등록
+{ "id": "wh-1", "name": "Webhook", "type": "n8n-nodes-base.webhook", "parameters": { "path": "my-webhook" }, "webhookId": "my-webhook" }
+```
