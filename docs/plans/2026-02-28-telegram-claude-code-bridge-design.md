@@ -4,16 +4,26 @@
 
 비개발자도 Telegram에서 Claude Code 스킬을 자유롭게 사용할 수 있는 환경을 구축한다. Claude Code on Web이나 Remote Control은 기술적 진입장벽이 높다. Telegram Bot을 통해 서버에 설치된 Claude Code에 접근하면, 누구나 Claude Code의 전체 능력(스킬, MCP 서버, 파일시스템, 셸)을 활용할 수 있다.
 
+## 핵심 설계 원칙
+
+**프로젝트 비의존성**: 이 브릿지 시스템은 특정 프로젝트에 종속되지 않는다. 어떤 Claude Code 프로젝트든 이 시스템과 결합할 수 있다.
+
+**1 프로젝트 = 1 봇 인스턴스**: 각 프로젝트는 자체 Telegram 봇 토큰, 포트, 데이터 디렉토리를 가진 독립 인스턴스로 운영된다. 사용자는 프로젝트별 다른 봇/채널에서 대화한다.
+
+**설정 기반 결합**: 프로젝트와 브릿지의 결합은 환경변수와 설치 명령으로만 이루어진다. 브릿지 코드 자체에 프로젝트 경로나 이름이 하드코딩되지 않는다.
+
 ## 요구사항
 
 - 소수 팀 (2-5명), 사용자별 독립 세션
-- 공유 프로젝트 (happiness 저장소의 스킬)
+- 프로젝트별 독립 봇 인스턴스
 - AskUserQuestion 등 인터랙티브 스킬 지원
 - Max 구독 인증 사용 (추가 API 비용 없음)
 - 독립 서비스 (n8n 불필요)
 - 홈서버 호스트에 직접 배포
 
 ## 아키텍처
+
+### 단일 프로젝트 뷰
 
 ```
 ┌─────────────┐
@@ -22,18 +32,76 @@
 └─────────────┘  │     ┌──────────────────────────────────────────────┐
                  │     │            홈서버 (Host)                      │
 ┌─────────────┐  │     │                                              │
-│  Telegram    │──┼────▶│  Telegram Bot (Python, port 7777)           │
+│  Telegram    │──┼────▶│  cc-bridge 인스턴스 (port 7777)              │
 │  (사용자 B)  │  │     │    │                                        │
 └─────────────┘  │     │    ├── Telegram 웹훅 수신 (HTTPS)            │
                  │     │    ├── 훅 HTTP 수신 (localhost:7777/hook)    │
 ┌─────────────┐  │     │    └── SessionManager                       │
-│  Telegram    │──┘     │         ├── cc-a: tmux 세션 → Claude Code  │
-│  (사용자 C)  │        │         ├── cc-b: tmux 세션 → Claude Code  │
-└─────────────┘        │         └── cc-c: tmux 세션 → Claude Code  │
+│  Telegram    │──┘     │         ├── tmux 세션 → Claude Code        │
+│  (사용자 C)  │        │         ├── tmux 세션 → Claude Code        │
+└─────────────┘        │         └── tmux 세션 → Claude Code        │
                        │                                              │
-                       │  모든 세션: cwd = ~/Projects/happiness       │
+                       │  모든 세션: cwd = $PROJECT_DIR               │
                        └──────────────────────────────────────────────┘
 ```
+
+### 다중 프로젝트 뷰
+
+```
+┌──────────────┐     ┌─────────────────────────────────────────┐
+│ @HappyBot    │────▶│ cc-bridge 인스턴스 A (port 7777)        │
+│ (happiness)  │     │   PROJECT_DIR=~/Projects/happiness      │
+└──────────────┘     │   tmux: happiness-{user_id}             │
+                     └─────────────────────────────────────────┘
+
+┌──────────────┐     ┌─────────────────────────────────────────┐
+│ @WorkBot     │────▶│ cc-bridge 인스턴스 B (port 7778)        │
+│ (work-tools) │     │   PROJECT_DIR=~/Projects/work-tools     │
+└──────────────┘     │   tmux: work-tools-{user_id}            │
+                     └─────────────────────────────────────────┘
+
+┌──────────────┐     ┌─────────────────────────────────────────┐
+│ @TeamBot     │────▶│ cc-bridge 인스턴스 C (port 7779)        │
+│ (team-ops)   │     │   PROJECT_DIR=~/Projects/team-ops       │
+└──────────────┘     │   tmux: team-ops-{user_id}              │
+                     └─────────────────────────────────────────┘
+
+각 인스턴스는 독립 프로세스, 독립 DB, 독립 봇 토큰.
+훅 스크립트만 각 프로젝트의 .claude/settings.json에 설치.
+```
+
+## 설정
+
+### 환경변수
+
+| 변수 | 필수 | 설명 | 예시 |
+|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | O | Telegram Bot API 토큰 | `123456:ABC-DEF...` |
+| `PROJECT_DIR` | O | 대상 프로젝트의 절대 경로 | `/home/user/Projects/happiness` |
+| `PROJECT_NAME` | X | tmux 세션 네임스페이스 (기본: 디렉토리명) | `happiness` |
+| `WEBHOOK_URL` | O | 외부 접근 가능한 HTTPS URL | `https://cc-bridge.example.com` |
+| `BOT_PORT` | X | HTTP 서버 포트 (기본: 7777) | `7778` |
+| `ALLOWED_TELEGRAM_USERS` | X | 허용 사용자 ID 목록 (빈값=전체 허용) | `123,456,789` |
+| `SESSION_IDLE_MINUTES` | X | 유휴 세션 자동 종료 시간 (기본: 30) | `60` |
+| `DATA_DIR` | X | DB 등 데이터 저장 경로 (기본: 현재 디렉토리) | `/var/lib/cc-bridge/happiness` |
+
+### 설치 명령
+
+```bash
+# 1. 브릿지 설치 (한 번)
+pip install cc-telegram-bridge  # 또는 git clone
+
+# 2. 프로젝트에 훅 설치 (프로젝트마다 한 번)
+cc-bridge install --project-dir ~/Projects/happiness --port 7777
+
+# 3. 인스턴스 실행
+cc-bridge run  # .env 파일 또는 환경변수에서 설정 로드
+```
+
+`cc-bridge install`이 하는 일:
+- 대상 프로젝트의 `.claude/settings.json`에 Notification, Stop 훅 추가
+- 훅이 `http://localhost:{port}/hook`으로 POST하도록 설정
+- 기존 훅 설정과 병합 (덮어쓰지 않음)
 
 ## 핵심 흐름
 
@@ -43,7 +111,7 @@
 2. Bot이 화이트리스트 확인
 3. 해당 사용자의 tmux 세션을 찾거나 생성
 4. Bot이 즉시 "처리 중..." 메시지 전송
-5. `tmux send-keys -l -t "cc-{user_id}" "{메시지}" Enter`로 주입
+5. `tmux send-keys`로 메시지 주입
 
 ### 응답 수신 (Claude Code → 사용자)
 
@@ -55,8 +123,6 @@
 | `Notification` (permission_prompt) | 권한 승인 요청 | 권한 요청을 Telegram으로 전달 |
 | `Notification` (idle_prompt) | 입력 대기 | 입력 대기 상태 알림 |
 | `Stop` | Claude Code 응답 완료 | last_assistant_message를 Telegram으로 전송 |
-
-훅 스크립트는 stdin으로 JSON을 받아 `curl`로 Bot 서버(localhost:7777/hook)에 POST한다.
 
 ### 역매핑
 
@@ -70,25 +136,37 @@ telegram_user_id ↔ tmux_session_name ↔ claude_session_id
 
 ## 세션 관리
 
+### 네이밍 컨벤션
+
+```
+tmux 세션 이름: {project_name}-{user_id}
+
+예:
+  happiness-123456789
+  work-tools-987654321
+```
+
+프로젝트 이름이 네임스페이스 역할을 하므로 다중 인스턴스가 같은 tmux 서버에서 충돌 없이 공존한다.
+
 ### 생성
 
 ```bash
-tmux new-session -d -s "cc-{user_id}" \
-  -c ~/Projects/happiness \
+tmux new-session -d -s "{project_name}-{user_id}" \
+  -c "$PROJECT_DIR" \
   "claude --dangerously-skip-permissions"
 ```
 
-- CLAUDE.md, 스킬, MCP 서버, 훅 모두 로드됨
+- 프로젝트의 CLAUDE.md, 스킬, MCP 서버, 훅 모두 로드됨
 - 대화형 TUI이므로 모든 인터랙션 가능
 
 ### 수명
 
-- 유휴 30분 후 자동 종료
+- 유휴 시간 초과 후 자동 종료 (`SESSION_IDLE_MINUTES`)
 - 다음 메시지 시 새 세션 자동 생성
 
 ### 동시성
 
-- 사용자당 1세션
+- 사용자당 1세션 (인스턴스 내)
 - 이전 응답 완료 전 새 메시지는 큐에 대기
 
 ## 메시지 포매팅
@@ -108,23 +186,24 @@ tmux new-session -d -s "cc-{user_id}" \
 
 ### 접근 제어
 
-- `ALLOWED_TELEGRAM_USERS` 환경변수로 화이트리스트 관리
+- `ALLOWED_TELEGRAM_USERS` 환경변수로 인스턴스별 화이트리스트 관리
 - 화이트리스트에 없는 사용자의 메시지는 무시
 - Claude Code가 `--dangerously-skip-permissions`로 실행되므로 Bot 레벨 접근 제어가 유일한 보안 경계
 
 ### 파일시스템
 
 - 소수 신뢰 팀 전제, 별도 격리 없음
-- 모든 세션이 같은 프로젝트 디렉토리에서 실행
+- 각 인스턴스의 세션은 해당 프로젝트 디렉토리에서만 실행
 
 ## 배포
 
-### 시스템 요구사항
+### 시스템 요구사항 (호스트)
 
 - Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
 - Max 구독 인증 (`claude login`)
 - tmux (시스템 패키지)
 - Python 3.11+
+- jq (훅 스크립트용)
 
 ### 기술 스택
 
@@ -132,53 +211,82 @@ tmux new-session -d -s "cc-{user_id}" \
 |---|---|---|
 | 언어 | Python | python-telegram-bot 생태계, 빠른 프로토타이핑 |
 | Telegram 라이브러리 | python-telegram-bot | 가장 성숙, 비동기 지원 |
-| HTTP 서버 (훅 수신) | aiohttp 또는 FastAPI | Bot과 같은 프로세스에서 비동기 실행 |
-| 세션 저장소 | SQLite | 파일 하나, 별도 DB 불필요 |
-| 프로세스 관리 | systemd | 호스트 직접 실행 |
+| HTTP 서버 (훅 수신) | Starlette + uvicorn | PTB 공식 예제 패턴, 경량 |
+| 세션 저장소 | SQLite | 인스턴스별 독립 DB 파일 |
+| 프로세스 관리 | systemd | 인스턴스별 서비스 유닛 |
 
 ### 네트워크
 
 - Telegram 웹훅: HTTPS 엔드포인트 필요 (Cloudflare Tunnel 또는 Nginx)
-- 훅 HTTP: localhost:7777 (외부 노출 불필요)
+- 훅 HTTP: localhost:{port}/hook (외부 노출 불필요)
+- 다중 인스턴스 시 Cloudflare Tunnel 하나로 경로 기반 라우팅 가능:
+  - `cc-bridge.example.com/happiness/telegram` → localhost:7777
+  - `cc-bridge.example.com/work-tools/telegram` → localhost:7778
 
-### 훅 설정
+### 훅 설정 (`cc-bridge install`이 자동 생성)
 
 ```jsonc
-// .claude/settings.json (프로젝트 레벨)
+// 대상 프로젝트의 .claude/settings.json에 병합됨
 {
   "hooks": {
     "Notification": [{
       "hooks": [{
         "type": "command",
-        "command": ".claude/hooks/bridge-notify.sh"
+        "command": "cat | curl -s -X POST http://localhost:7777/hook -H 'Content-Type: application/json' -d @- > /dev/null 2>&1 &"
       }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": ".claude/hooks/bridge-stop.sh"
+        "command": "INPUT=$(cat); STOP_ACTIVE=$(echo \"$INPUT\" | jq -r '.stop_hook_active // false'); [ \"$STOP_ACTIVE\" = \"true\" ] && exit 0; echo \"$INPUT\" | curl -s -X POST http://localhost:7777/hook -H 'Content-Type: application/json' -d @- > /dev/null 2>&1 &"
       }]
     }]
   }
 }
 ```
 
-### systemd 서비스
+별도 셸 스크립트 파일 없이 인라인 명령으로 처리. 프로젝트에 파일을 추가하지 않는다.
+
+### systemd 서비스 (인스턴스별)
 
 ```ini
+# /etc/systemd/system/cc-bridge@.service (템플릿 유닛)
 [Unit]
-Description=Claude Code Telegram Bridge
+Description=Claude Code Telegram Bridge (%i)
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /opt/cc-telegram-bridge/bot.py
+Type=simple
+ExecStart=/usr/bin/cc-bridge run
 Restart=always
-Environment=TELEGRAM_BOT_TOKEN=xxx
-Environment=ALLOWED_TELEGRAM_USERS=xxx
-WorkingDirectory=/home/user/Projects/happiness
+RestartSec=5
+EnvironmentFile=/etc/cc-bridge/%i.env
 
 [Install]
 WantedBy=multi-user.target
+```
+
+사용:
+```bash
+# happiness 프로젝트 인스턴스
+sudo systemctl start cc-bridge@happiness
+sudo systemctl enable cc-bridge@happiness
+
+# work-tools 프로젝트 인스턴스
+sudo systemctl start cc-bridge@work-tools
+sudo systemctl enable cc-bridge@work-tools
+```
+
+환경 파일:
+```bash
+# /etc/cc-bridge/happiness.env
+TELEGRAM_BOT_TOKEN=...
+PROJECT_DIR=/home/user/Projects/happiness
+PROJECT_NAME=happiness
+WEBHOOK_URL=https://cc-bridge.example.com
+BOT_PORT=7777
+ALLOWED_TELEGRAM_USERS=123,456
+DATA_DIR=/var/lib/cc-bridge/happiness
 ```
 
 ## 사용자 경험 예시
@@ -211,8 +319,8 @@ Bot:    "✅ 강남 A룸 14:00-15:00 예약 완료했습니다."
 
 ## 향후 확장 가능성
 
-- 사용자별 프로젝트 디렉토리 전환 지원
 - 파일 업로드/다운로드 (이미지, 문서)
 - 음성 메시지 전사 (Whisper)
 - 세션 히스토리 조회
 - 스킬 목록 조회 명령어 (`/skills`)
+- 관리용 대시보드 (전체 인스턴스 모니터링)

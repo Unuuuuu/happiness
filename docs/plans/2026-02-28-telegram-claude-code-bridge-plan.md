@@ -33,11 +33,13 @@ aiosqlite>=0.20.0
 
 ```bash
 TELEGRAM_BOT_TOKEN=your-bot-token-here
-ALLOWED_TELEGRAM_USERS=123456789,987654321
+PROJECT_DIR=/path/to/your/project
+PROJECT_NAME=my-project          # tmux 네임스페이스 (기본: 디렉토리명)
 WEBHOOK_URL=https://cc-bridge.yourdomain.com
-PROJECT_DIR=/home/user/Projects/happiness
-BOT_PORT=7777
+BOT_PORT=7777                    # 다중 인스턴스 시 포트를 다르게 설정
+ALLOWED_TELEGRAM_USERS=123456789,987654321
 SESSION_IDLE_MINUTES=30
+DATA_DIR=./data                  # DB 등 데이터 저장 경로
 ```
 
 **Step 3: bot.py 빈 엔트리포인트 작성**
@@ -78,9 +80,11 @@ git commit -m "feat: Telegram-Claude Code 브릿지 프로젝트 스캐폴딩"
 **Step 1: db.py 작성**
 
 ```python
+import os
+
 import aiosqlite
 
-DB_PATH = "bridge.db"
+DB_PATH = os.path.join(os.environ.get("DATA_DIR", "."), "bridge.db")
 
 
 async def init_db():
@@ -219,12 +223,13 @@ logger = logging.getLogger(__name__)
 
 
 class SessionManager:
-    def __init__(self, project_dir: str):
+    def __init__(self, project_dir: str, project_name: str):
         self.server = libtmux.Server()
         self.project_dir = project_dir
+        self.project_name = project_name
 
     def _session_name(self, user_id: int) -> str:
-        return f"cc-{user_id}"
+        return f"{self.project_name}-{user_id}"
 
     def session_exists(self, user_id: int) -> bool:
         name = self._session_name(user_id)
@@ -586,7 +591,8 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
-PROJECT_DIR = os.environ.get("PROJECT_DIR", os.path.expanduser("~/Projects/happiness"))
+PROJECT_DIR = os.environ["PROJECT_DIR"]
+PROJECT_NAME = os.environ.get("PROJECT_NAME", os.path.basename(PROJECT_DIR))
 PORT = int(os.environ.get("BOT_PORT", "7777"))
 
 
@@ -594,7 +600,7 @@ async def main():
     await init_db()
     load_allowed_users()
 
-    session_mgr = SessionManager(project_dir=PROJECT_DIR)
+    session_mgr = SessionManager(project_dir=PROJECT_DIR, project_name=PROJECT_NAME)
 
     # PTB Application (updater=None for custom webhook handling)
     ptb = (
@@ -668,76 +674,122 @@ git commit -m "feat: 메인 애플리케이션 통합 — Starlette + PTB + 훅 
 
 ---
 
-## Task 8: Claude Code 훅 설정
+## Task 8: 훅 설치 CLI 명령
 
 **Files:**
-- Create: `cc-telegram-bridge/hooks/bridge-notify.sh`
-- Create: `cc-telegram-bridge/hooks/bridge-stop.sh`
+- Create: `cc-telegram-bridge/installer.py`
 
-**Step 1: 훅 스크립트 작성**
+**Step 1: installer.py 작성**
 
-`bridge-notify.sh`:
+대상 프로젝트의 `.claude/settings.json`에 훅을 자동 병합하는 CLI 명령.
+별도 셸 스크립트 파일 없이 인라인 명령으로 처리하므로 프로젝트에 파일을 추가하지 않는다.
 
-```bash
-#!/bin/bash
-INPUT=$(cat)
-curl -s -X POST http://localhost:7777/hook \
-  -H "Content-Type: application/json" \
-  -d "$INPUT" > /dev/null 2>&1 &
-exit 0
+```python
+import json
+import os
+import sys
+
+
+def install_hooks(project_dir: str, port: int = 7777):
+    """대상 프로젝트의 .claude/settings.json에 브릿지 훅을 병합."""
+    settings_path = os.path.join(project_dir, ".claude", "settings.json")
+
+    # 기존 설정 로드
+    if os.path.exists(settings_path):
+        with open(settings_path) as f:
+            settings = json.load(f)
+    else:
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        settings = {}
+
+    hooks = settings.setdefault("hooks", {})
+
+    # Notification 훅 추가
+    notify_cmd = (
+        f"cat | curl -s -X POST http://localhost:{port}/hook "
+        f"-H 'Content-Type: application/json' -d @- > /dev/null 2>&1 &"
+    )
+    notify_hook = {"hooks": [{"type": "command", "command": notify_cmd}]}
+
+    # Stop 훅 추가 (stop_hook_active 체크 포함)
+    stop_cmd = (
+        f'INPUT=$(cat); '
+        f'STOP_ACTIVE=$(echo "$INPUT" | jq -r \'.stop_hook_active // false\'); '
+        f'[ "$STOP_ACTIVE" = "true" ] && exit 0; '
+        f'echo "$INPUT" | curl -s -X POST http://localhost:{port}/hook '
+        f'-H \'Content-Type: application/json\' -d @- > /dev/null 2>&1 &'
+    )
+    stop_hook = {"hooks": [{"type": "command", "command": stop_cmd}]}
+
+    # 기존 훅과 병합 (기존 항목을 유지하고 추가)
+    hooks.setdefault("Notification", []).append(notify_hook)
+    hooks.setdefault("Stop", []).append(stop_hook)
+
+    with open(settings_path, "w") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+
+    print(f"Hooks installed to {settings_path} (port {port})")
+
+
+def uninstall_hooks(project_dir: str, port: int = 7777):
+    """대상 프로젝트에서 브릿지 훅을 제거."""
+    settings_path = os.path.join(project_dir, ".claude", "settings.json")
+    if not os.path.exists(settings_path):
+        print("No settings.json found")
+        return
+
+    with open(settings_path) as f:
+        settings = json.load(f)
+
+    hooks = settings.get("hooks", {})
+    port_str = f"localhost:{port}"
+
+    for event in ["Notification", "Stop"]:
+        if event in hooks:
+            hooks[event] = [
+                h for h in hooks[event]
+                if not any(port_str in hook.get("command", "") for hook in h.get("hooks", []))
+            ]
+            if not hooks[event]:
+                del hooks[event]
+
+    with open(settings_path, "w") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+
+    print(f"Hooks removed from {settings_path}")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python installer.py install|uninstall <project_dir> [port]")
+        sys.exit(1)
+
+    action = sys.argv[1]
+    project_dir = os.path.expanduser(sys.argv[2])
+    port = int(sys.argv[3]) if len(sys.argv) > 3 else 7777
+
+    if action == "install":
+        install_hooks(project_dir, port)
+    elif action == "uninstall":
+        uninstall_hooks(project_dir, port)
+    else:
+        print(f"Unknown action: {action}")
+        sys.exit(1)
 ```
 
-`bridge-stop.sh`:
+**Step 2: 실행 확인**
+
+Run: `python installer.py install /tmp/test-project 7777`
+Expected: `/tmp/test-project/.claude/settings.json` 생성, 훅 설정 포함
+
+Run: `python installer.py uninstall /tmp/test-project 7777`
+Expected: 훅 설정 제거
+
+**Step 3: 커밋**
 
 ```bash
-#!/bin/bash
-INPUT=$(cat)
-STOP_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
-if [ "$STOP_ACTIVE" = "true" ]; then
-  exit 0
-fi
-curl -s -X POST http://localhost:7777/hook \
-  -H "Content-Type: application/json" \
-  -d "$INPUT" > /dev/null 2>&1 &
-exit 0
-```
-
-**Step 2: 실행 권한 부여**
-
-```bash
-chmod +x cc-telegram-bridge/hooks/bridge-notify.sh
-chmod +x cc-telegram-bridge/hooks/bridge-stop.sh
-```
-
-**Step 3: 훅 설치 안내 문서 작성**
-
-홈서버의 `~/Projects/happiness/.claude/settings.json`에 아래 훅을 추가해야 한다 (기존 SessionStart 훅과 병합):
-
-```jsonc
-{
-  "hooks": {
-    "SessionStart": [/* 기존 설정 유지 */],
-    "Notification": [{
-      "hooks": [{
-        "type": "command",
-        "command": "/opt/cc-telegram-bridge/hooks/bridge-notify.sh"
-      }]
-    }],
-    "Stop": [{
-      "hooks": [{
-        "type": "command",
-        "command": "/opt/cc-telegram-bridge/hooks/bridge-stop.sh"
-      }]
-    }]
-  }
-}
-```
-
-**Step 4: 커밋**
-
-```bash
-git add cc-telegram-bridge/hooks/
-git commit -m "feat: Claude Code 훅 스크립트 추가 (Notification, Stop)"
+git add cc-telegram-bridge/installer.py
+git commit -m "feat: 프로젝트별 훅 설치/제거 CLI 명령 추가"
 ```
 
 ---
@@ -874,20 +926,19 @@ git commit -m "feat: 유휴 세션 자동 정리 스케줄러 추가"
 
 ---
 
-## Task 11: 배포 설정
+## Task 11: 배포 설정 (다중 인스턴스)
 
 **Files:**
-- Create: `cc-telegram-bridge/systemd/cc-bridge.service`
-- Create: `cc-telegram-bridge/systemd/cc-bridge-tunnel.service`
+- Create: `cc-telegram-bridge/systemd/cc-bridge@.service`
 - Create: `cc-telegram-bridge/deploy.sh`
 
-**Step 1: systemd 서비스 파일 작성**
+**Step 1: systemd 템플릿 유닛 작성**
 
-`cc-bridge.service`:
+`cc-bridge@.service` — `%i`가 인스턴스 이름(프로젝트명)으로 치환됨:
 
 ```ini
 [Unit]
-Description=Claude Code Telegram Bridge
+Description=Claude Code Telegram Bridge (%i)
 After=network.target
 
 [Service]
@@ -895,25 +946,7 @@ Type=simple
 ExecStart=/usr/bin/python3 /opt/cc-telegram-bridge/bot.py
 Restart=always
 RestartSec=5
-EnvironmentFile=/opt/cc-telegram-bridge/.env
-WorkingDirectory=/opt/cc-telegram-bridge
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`cc-bridge-tunnel.service`:
-
-```ini
-[Unit]
-Description=Cloudflare Tunnel for CC Bridge
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/cloudflared tunnel run cc-bridge
-Restart=always
-RestartSec=5
+EnvironmentFile=/etc/cc-bridge/%i.env
 
 [Install]
 WantedBy=multi-user.target
@@ -926,36 +959,73 @@ WantedBy=multi-user.target
 set -e
 
 INSTALL_DIR=/opt/cc-telegram-bridge
+INSTANCE_NAME=${1:?사용법: ./deploy.sh <instance-name>}
 
-echo "=== CC Telegram Bridge 배포 ==="
+echo "=== CC Telegram Bridge 배포: $INSTANCE_NAME ==="
 
-# 파일 복사
+# 브릿지 코드 설치 (최초 1회)
 sudo mkdir -p "$INSTALL_DIR"
-sudo cp -r ./* "$INSTALL_DIR/"
-
-# 의존성 설치
+sudo cp bot.py db.py session_manager.py message_utils.py \
+  hook_handler.py telegram_handlers.py cleanup.py installer.py \
+  requirements.txt "$INSTALL_DIR/"
 cd "$INSTALL_DIR"
 pip install -r requirements.txt
 
-# 훅 실행 권한
-chmod +x hooks/*.sh
+# 인스턴스 환경 파일 확인
+if [ ! -f "/etc/cc-bridge/${INSTANCE_NAME}.env" ]; then
+  sudo mkdir -p /etc/cc-bridge
+  echo "환경 파일을 생성하세요: /etc/cc-bridge/${INSTANCE_NAME}.env"
+  echo "예시:"
+  echo "  TELEGRAM_BOT_TOKEN=..."
+  echo "  PROJECT_DIR=/path/to/project"
+  echo "  PROJECT_NAME=$INSTANCE_NAME"
+  echo "  WEBHOOK_URL=https://..."
+  echo "  BOT_PORT=7777"
+  echo "  ALLOWED_TELEGRAM_USERS=..."
+  echo "  DATA_DIR=/var/lib/cc-bridge/$INSTANCE_NAME"
+  exit 1
+fi
+
+# 데이터 디렉토리 생성
+DATA_DIR=$(grep DATA_DIR "/etc/cc-bridge/${INSTANCE_NAME}.env" | cut -d= -f2)
+sudo mkdir -p "${DATA_DIR:-/var/lib/cc-bridge/$INSTANCE_NAME}"
+
+# 대상 프로젝트에 훅 설치
+PROJECT_DIR=$(grep PROJECT_DIR "/etc/cc-bridge/${INSTANCE_NAME}.env" | cut -d= -f2)
+BOT_PORT=$(grep BOT_PORT "/etc/cc-bridge/${INSTANCE_NAME}.env" | cut -d= -f2)
+python3 installer.py install "$PROJECT_DIR" "${BOT_PORT:-7777}"
 
 # systemd 등록
-sudo cp systemd/*.service /etc/systemd/system/
+sudo cp systemd/cc-bridge@.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable cc-bridge cc-bridge-tunnel
-sudo systemctl restart cc-bridge cc-bridge-tunnel
+sudo systemctl enable "cc-bridge@${INSTANCE_NAME}"
+sudo systemctl restart "cc-bridge@${INSTANCE_NAME}"
 
-echo "=== 배포 완료 ==="
-echo "상태 확인: sudo systemctl status cc-bridge"
+echo "=== 배포 완료: $INSTANCE_NAME ==="
+echo "상태 확인: sudo systemctl status cc-bridge@${INSTANCE_NAME}"
 ```
 
-**Step 3: 커밋**
+**Step 3: 사용 예시**
+
+```bash
+# happiness 프로젝트 인스턴스 배포
+./deploy.sh happiness
+
+# work-tools 프로젝트 인스턴스 추가 배포
+./deploy.sh work-tools
+
+# 인스턴스 관리
+sudo systemctl status cc-bridge@happiness
+sudo systemctl status cc-bridge@work-tools
+sudo systemctl stop cc-bridge@happiness
+```
+
+**Step 4: 커밋**
 
 ```bash
 git add cc-telegram-bridge/systemd/ cc-telegram-bridge/deploy.sh
 chmod +x cc-telegram-bridge/deploy.sh
-git commit -m "feat: systemd 서비스 및 배포 스크립트 추가"
+git commit -m "feat: 다중 인스턴스 systemd 템플릿 및 배포 스크립트 추가"
 ```
 
 ---
@@ -972,8 +1042,11 @@ git commit -m "feat: systemd 서비스 및 배포 스크립트 추가"
 **Step 1: 서비스 시작**
 
 ```bash
+# Cloudflare Tunnel 시작 (별도 설정)
 sudo systemctl start cc-bridge-tunnel
-sudo systemctl start cc-bridge
+
+# happiness 인스턴스 시작
+sudo systemctl start cc-bridge@happiness
 ```
 
 **Step 2: 기본 동작 확인**
