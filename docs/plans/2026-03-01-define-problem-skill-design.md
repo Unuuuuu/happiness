@@ -17,7 +17,7 @@
 | 논의 필요 표시 | 인라인 상태 태그 (확정/논의 필요/미정) |
 | 호출 방식 | 인자 있으면 구조화부터, 없으면 자유 설명부터 |
 | 출력 | Markdown 문서 (docs/problems/YYYY-MM-DD-\<topic\>.md) |
-| 스킬 구조 | SKILL.md + references/ (framework.md, template.md) |
+| 스킬 구조 | SKILL.md + references/ (framework.md, template.md) — `.claude/skills/define-problem/` |
 
 ---
 
@@ -40,7 +40,7 @@ define-problem/
 ```yaml
 ---
 name: define-problem
-description: 문제 정의 프레임워크를 사용하여 문제를 구조화된 문서로 정의. 문제를 분석하거나, 문제 정의를 요청하거나, 문제 상황을 설명할 때 사용.
+description: Guide users through a 7-step problem definition framework to produce a structured draft document. Use when analyzing a problem, requesting problem definition, or describing a problem situation.
 ---
 ```
 
@@ -75,7 +75,12 @@ description: 문제 정의 프레임워크를 사용하여 문제를 구조화�
 영향 → 원인 → 해결 방향 → 성공 기준 (순차 진행)
     │
     ↓
-전체 문서 초안 제시 + 사용자 확인
+전체 문서 초안 제시
+    │
+    ↓
+사용자 확인 ──수정──→ 전체 문서 초안 재제시 (반복)
+    │
+   확인
     │
     ↓
 docs/problems/YYYY-MM-DD-<topic>.md 로 저장
@@ -95,7 +100,7 @@ docs/problems/YYYY-MM-DD-<topic>.md 로 저장
 각 단계 항목에 다음 중 하나를 표기:
 
 - **`확정`** — 작성자가 확신하는 내용. 데이터나 합의로 뒷받침됨.
-- **`논의 필요`** — 팀 합의가 필요한 부분. 작성자의 초안은 적되, 논의 포인트를 `> 팀원 의견:` 블록으로 명시.
+- **`논의 필요`** — 팀 합의가 필요한 부분. 작성자의 초안은 적되, 논의 포인트를 `> 논의 포인트:` 블록으로 명시.
 - **`미정`** — 아직 정보가 부족하여 작성하지 못한 부분. 어떤 정보가 필요한지 명시.
 
 ### 프레임워크 원문 참조

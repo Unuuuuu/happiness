@@ -38,6 +38,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 디렉토리 구조 규칙
 
 - `docs/plans/` — 스킬 설계 문서 (`YYYY-MM-DD-<주제>.md`)
+- `docs/problems/` — `/define-problem` 스킬 산출물 (문제 정의 초안 문서)
 - `docs/lookups/` — `/lookup` 스킬 실행 결과 기록
 - `.claude/skills/<스킬명>/SKILL.md` — 스킬 정의 (YAML frontmatter + Markdown)
 - `.claude/skills/<스킬명>/references/` — 스킬이 참조하는 레퍼런스 파일

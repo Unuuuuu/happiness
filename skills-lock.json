@@ -1,10 +1,4 @@
 {
   "version": 1,
-  "skills": {
-    "problem-definition": {
-      "source": "refoundai/lenny-skills",
-      "sourceType": "github",
-      "computedHash": "aba304cd9cccbc00a669ac7667d0c9db70e67fc0ddaf6231dd31ccc006b06e2d"
-    }
-  }
+  "skills": {}
 }

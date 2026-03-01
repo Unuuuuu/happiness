@@ -4,39 +4,40 @@
 
 **Goal:** Create a `define-problem` skill that guides users through a 7-step problem definition framework via conversational interaction, producing a structured Markdown draft document.
 
-**Architecture:** Three files — SKILL.md (process flow, rules, output format), references/framework.md (full framework text with examples and validation questions), references/template.md (output document template). Installed as a user-level skill in `~/.agents/skills/define-problem/` with a symlink in `~/.claude/skills/`.
+**Architecture:** Three files — SKILL.md (process flow, rules, output format), references/framework.md (full framework text with examples and validation questions), references/template.md (output document template). Installed in the project at `.claude/skills/define-problem/`.
 
 **Tech Stack:** Markdown skill files, Claude Code skill system
 
 ---
 
-### Task 1: Create skill directory structure
+### Task 1: Create directories
+
+**Step 0: Create output directory**
+
+```bash
+mkdir -p docs/problems
+```
+
+이 디렉토리는 define-problem 스킬의 산출물(문제 정의 초안 문서)이 저장되는 곳이다.
+
+---
+
+### Task 1-1: Create skill directory structure
 
 **Files:**
-- Create: `~/.agents/skills/define-problem/`
-- Create: `~/.agents/skills/define-problem/references/`
+- Create: `.claude/skills/define-problem/`
+- Create: `.claude/skills/define-problem/references/`
 
 **Step 1: Create directories**
 
 ```bash
-mkdir -p ~/.agents/skills/define-problem/references
+mkdir -p .claude/skills/define-problem/references
 ```
 
 **Step 2: Verify**
 
-Run: `ls -la ~/.agents/skills/define-problem/`
+Run: `ls -la .claude/skills/define-problem/`
 Expected: Empty directory with `references/` subdirectory
-
-**Step 3: Create symlink for skill registration**
-
-```bash
-ln -s ../../.agents/skills/define-problem ~/.claude/skills/define-problem
-```
-
-**Step 4: Verify symlink**
-
-Run: `ls -la ~/.claude/skills/define-problem`
-Expected: Symlink pointing to `../../.agents/skills/define-problem`
 
 ---
 
@@ -45,16 +46,16 @@ Expected: Symlink pointing to `../../.agents/skills/define-problem`
 This is the full framework text that SKILL.md references during each step. Copy from the existing design document with no modifications.
 
 **Files:**
-- Create: `~/.agents/skills/define-problem/references/framework.md`
+- Create: `.claude/skills/define-problem/references/framework.md`
 - Source: `docs/plans/2026-03-01-problem-definition-framework-design.md`
 
 **Step 1: Copy framework content**
 
-Copy the entire content of `docs/plans/2026-03-01-problem-definition-framework-design.md` into `~/.agents/skills/define-problem/references/framework.md` verbatim.
+Copy the entire content of `docs/plans/2026-03-01-problem-definition-framework-design.md` into `.claude/skills/define-problem/references/framework.md` verbatim.
 
 **Step 2: Verify**
 
-Run: `wc -l ~/.agents/skills/define-problem/references/framework.md`
+Run: `wc -l .claude/skills/define-problem/references/framework.md`
 Expected: 307 lines (matches source)
 
 ---
@@ -64,7 +65,7 @@ Expected: 307 lines (matches source)
 The output document template that the skill fills in during conversation.
 
 **Files:**
-- Create: `~/.agents/skills/define-problem/references/template.md`
+- Create: `.claude/skills/define-problem/references/template.md`
 
 **Step 1: Write template file**
 
@@ -147,7 +148,7 @@ The output document template that the skill fills in during conversation.
 
 **Step 2: Verify**
 
-Run: `head -5 ~/.agents/skills/define-problem/references/template.md`
+Run: `head -5 .claude/skills/define-problem/references/template.md`
 Expected: `# 문제 정의: {제목}` header visible
 
 ---
@@ -157,14 +158,14 @@ Expected: `# 문제 정의: {제목}` header visible
 The main skill file with YAML frontmatter, process flow, rules, and instructions.
 
 **Files:**
-- Create: `~/.agents/skills/define-problem/SKILL.md`
+- Create: `.claude/skills/define-problem/SKILL.md`
 
 **Step 1: Write SKILL.md**
 
 ```markdown
 ---
 name: define-problem
-description: 문제 정의 프레임워크를 사용하여 문제를 구조화된 문서로 정의. 문제를 분석하거나, 문제 정의를 요청하거나, 문제 상황을 설명할 때 사용.
+description: Guide users through a 7-step problem definition framework to produce a structured draft document. Use when analyzing a problem, requesting problem definition, or describing a problem situation.
 ---
 
 # 문제 정의 (Problem Definition)
@@ -268,12 +269,12 @@ digraph define_problem {
 
 **Step 2: Verify YAML frontmatter**
 
-Run: `head -4 ~/.agents/skills/define-problem/SKILL.md`
+Run: `head -4 .claude/skills/define-problem/SKILL.md`
 Expected:
 ```
 ---
 name: define-problem
-description: 문제 정의 프레임워크를 사용하여 문제를 구조화된 문서로 정의. 문제를 분석하거나, 문제 정의를 요청하거나, 문제 상황을 설명할 때 사용.
+description: Guide users through a 7-step problem definition framework to produce a structured draft document. Use when analyzing a problem, requesting problem definition, or describing a problem situation.
 ---
 ```
 
@@ -281,34 +282,29 @@ description: 문제 정의 프레임워크를 사용하여 문제를 구조화�
 
 ### Task 5: Verify skill registration
 
-**Step 1: Check skill appears in the skills list**
+**Step 1: Check all files exist**
 
-Run: `ls -la ~/.claude/skills/define-problem`
-Expected: Symlink pointing to define-problem skill directory
-
-**Step 2: Check all files exist**
-
-Run: `find ~/.agents/skills/define-problem -type f | sort`
+Run: `find .claude/skills/define-problem -type f | sort`
 Expected:
 ```
-/Users/unu/.agents/skills/define-problem/SKILL.md
-/Users/unu/.agents/skills/define-problem/references/framework.md
-/Users/unu/.agents/skills/define-problem/references/template.md
+.claude/skills/define-problem/SKILL.md
+.claude/skills/define-problem/references/framework.md
+.claude/skills/define-problem/references/template.md
 ```
 
-**Step 3: Validate SKILL.md frontmatter**
+**Step 2: Validate SKILL.md frontmatter**
 
-Run: `head -4 ~/.agents/skills/define-problem/SKILL.md`
+Run: `head -4 .claude/skills/define-problem/SKILL.md`
 Expected: Valid YAML frontmatter with `name: define-problem`
 
-**Step 4: Commit**
+**Step 3: Commit**
 
 ```bash
 git add docs/plans/2026-03-01-define-problem-skill-design.md docs/plans/2026-03-01-define-problem-skill-implementation.md
-git commit -m "docs: add define-problem skill design and implementation plan"
+git commit -m "docs: define-problem 스킬 설계 및 구현 계획 추가"
 ```
 
-Note: The skill files themselves live in `~/.agents/skills/` (outside the repo) and are not committed to this project.
+Note: 스킬 파일은 프로젝트 내부 `.claude/skills/define-problem/`에 위치하므로 git에 의해 추적됩니다.
 
 ---
 
